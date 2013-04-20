@@ -1,0 +1,226 @@
+
+<html height="600" width="325">
+    <head>
+        <title></title>
+        <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+        <script type="text/javascript">
+            var fragShaderSource = "\
+            precision highp float;\
+            uniform vec4 u_color;\
+            void main(void) {\
+            gl_FragColor = u_color;\
+            }\
+            ";
+            var vtxShaderSource = "\
+            attribute vec3 a_position;\
+            attribute vec4 a_color;\
+            attribute vec3 a_normal;\
+            varying vec4 u_color;\
+            varying vec3 u_lightWeighting;\
+            uniform vec3 u_ambientColor;\
+            uniform vec3 u_lightingDirection;\
+            uniform vec3 u_directionalColor;\
+            uniform bool u_useLighting;\
+            uniform mat4 u_mvMatrix;\
+            uniform mat4 u_pMatrix;\
+            uniform mat3 u_nMatrix;\
+            void main(void) {\
+            gl_Position = u_pMatrix * u_mvMatrix * vec4(a_position, 1.0);\
+            u_lightWeighting = vec3(0.0,0.4,0.5);\
+            vec3 transformedNormal = u_nMatrix * a_normal;\
+            float directionalLightWeighting = max(dot(transformedNormal, u_lightingDirection), 0.0);\
+            u_lightWeighting = u_ambientColor + u_directionalColor * directionalLightWeighting;\
+            }\
+            ";
+            
+            
+            ( function () {
+             
+             var lastTime = 0;
+             var vendors = [ 'ms', 'moz', 'webkit', 'o' ];
+             
+             for ( var x = 0; x < vendors.length && !window.requestAnimationFrame; ++ x ) {
+             
+             window.requestAnimationFrame = window[ vendors[ x ] + 'RequestAnimationFrame' ];
+             window.cancelAnimationFrame = window[ vendors[ x ] + 'CancelAnimationFrame' ] || window[ vendors[ x ] + 'CancelRequestAnimationFrame' ];
+             
+             }
+             
+             if ( window.requestAnimationFrame === undefined ) {
+             
+             window.requestAnimationFrame = function ( callback ) {
+             
+             var currTime = Date.now(), timeToCall = Math.max( 0, 16 - ( currTime - lastTime ) );
+             var id = window.setTimeout( function() { callback( currTime + timeToCall ); }, timeToCall );
+             lastTime = currTime + timeToCall;
+             return id;
+             
+             };
+             
+             }
+             
+             window.cancelAnimationFrame = window.cancelAnimationFrame || function ( id ) { window.clearTimeout( id ) };
+             
+             }() );
+            
+            
+            function get_shader(type, source) {
+                var shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                return shader;
+            }
+            var gl, nMatrix, vbuf, tbuf, nbuf, ibuf;
+            var vtx;
+            var idx;
+            var ndx;
+            var nvertics = 0;
+            var nfaces = 0;
+            var shaderProgram;
+            var pMatrix = mat4.create();
+            var mvMatrix = mat4.create();
+            var mvMatrixStack = [];
+            
+            function setMatrixUniforms() {
+                gl.uniformMatrix4fv(shaderProgram.pMUniform, false, pMatrix);
+                gl.uniformMatrix4fv(shaderProgram.mvMUniform, false, mvMatrix);
+                
+                
+                var normalMatrix = mat3.create();
+                mat4.toInverseMat3(mvMatrix, normalMatrix);
+                mat3.transpose(normalMatrix);
+                gl.uniformMatrix3fv(shaderProgram.nMUniform, false, normalMatrix);
+                 
+                
+            }
+            function onready() {                
+                var canvas = document.getElementsByTagName('canvas')[0];
+                mat4.perspective(45, canvas.width/canvas.height, 0.1, 100, pMatrix);
+                gl = canvas.getContext("experimental-webgl", {antialias : true});
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                var vertexShader = get_shader(gl.VERTEX_SHADER, (vtxShaderSource));
+                var fragmentShader = get_shader(gl.FRAGMENT_SHADER, (fragShaderSource));
+                shaderProgram = gl.createProgram();
+                gl.attachShader(shaderProgram, vertexShader);
+                gl.attachShader(shaderProgram, fragmentShader);
+                gl.linkProgram(shaderProgram);
+                gl.useProgram(shaderProgram);
+                shaderProgram.aposAttrib = gl.getAttribLocation(shaderProgram, "a_position");
+                gl.enableVertexAttribArray(shaderProgram.aposAttrib);
+                
+                
+                shaderProgram.anomAttrib = gl.getAttribLocation(shaderProgram, "a_normal");
+                 
+                gl.enableVertexAttribArray(shaderProgram.anomAttrib);
+                
+                shaderProgram.colorUniform = gl.getUniformLocation(shaderProgram, "u_color");
+                shaderProgram.pMUniform = gl.getUniformLocation(shaderProgram, "u_pMatrix");
+                shaderProgram.mvMUniform = gl.getUniformLocation(shaderProgram, "u_mvMatrix");
+                
+                shaderProgram.nMUniform = gl.getUniformLocation(shaderProgram, "u_nMatrix");
+                shaderProgram.ambientColorUniform = gl.getUniformLocation(shaderProgram, "u_ambientColor");
+                shaderProgram.useLightingUniform = gl.getUniformLocation(shaderProgram, "u_useLighting");
+                shaderProgram.lightingDirectionUniform = gl.getUniformLocation(shaderProgram, "u_lightingDirection");
+                shaderProgram.directionColorUniform = gl.getUniformLocation(shaderProgram, "u_directionalColor");
+                
+                gl.clearColor(0.0, 0.0, 0.0, 1.0);
+                gl.enable(gl.DEPTH_TEST);
+                
+                
+                
+            }
+            
+            function initArray(vtxSize, idxSize) {
+                vtx = new Array(vtxSize);
+                ide = new Array(idxSize);
+            }
+            
+            function degTorad(degrees) {
+                return degrees * Math.PI / 180;
+            }
+            
+            function setVtx(_vtx) {
+                vtx = _vtx;
+            }
+            
+            function setIdx(_idx) {
+                idx = _idx;
+            }
+            
+            function setNdx(_ndx) {
+                ndx = _ndx;
+            }
+            
+            
+            function initBuffers() {
+                vbuf = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vtx), gl.STATIC_DRAW);
+                ibuf = gl.createBuffer();
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibuf);
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+                
+                
+                nbuf = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, nbuf);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ndx), gl.STATIC_DRAW);
+                 
+            }
+            
+            var rShape = 0.0;
+            function draw() {
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                var canvas = document.getElementsByTagName('canvas')[0];
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+                gl.vertexAttribPointer(shaderProgram.aposAttrib, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, nbuf);
+                gl.vertexAttribPointer(shaderProgram.anomAttrib, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.uniform4f(shaderProgram.colorUniform, 1.0, 0.0, 0.0, 1.0);
+                
+                mat4.identity(mvMatrix);
+                mat4.translate(mvMatrix, [-0.3, -0.3, -2.0]);
+                mat4.rotate(mvMatrix, degTorad(rShape), [-1.0, -1.0, -1.0]);
+                
+                
+                gl.uniform3f(shaderProgram.ambientColorUniform, 0.2, 0.2, 0.2);
+                 
+                var lightingDirection = [-0.5, -1.0, -1.0];
+                
+                var adjustedLD = vec3.create();
+                vec3.normalize(lightingDirection, adjustedLD);
+                vec3.scale(adjustedLD, -1);
+                
+                gl.uniform3fv(shaderProgram.lightingDirectionUniform, adjustedLD);
+                
+                gl.uniform3f(shaderProgram.directionColorUniform, 0.2, 0.2, 0.2);
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibuf);
+                setMatrixUniforms();
+                gl.drawElements(gl.TRIANGLES, nfaces * 3, gl.UNSIGNED_SHORT, 0);
+            }
+            
+            var lastTime = 0;
+            function animate() {
+                var timeNow = new Date().getTime();
+                if(lastTime != 0) {
+                    var elapsed = timeNow - lastTime;
+                    rShape += (90 * elapsed) / 2000.0;
+                }
+                lastTime = timeNow;
+            }
+            
+            function tick() {
+                
+                window.requestAnimationFrame(tick);
+                animate();
+                draw();
+            }
+            </script>
+    </head>
+    <body onload="onready();">
+        <canvas width="330" height="250"></canvas>
+    </body>
+</html>
